@@ -267,13 +267,19 @@ export default function VideoExportModal({
       let mediaRecorder;
       // High-fidelity bitrate: 60 Mbps for 4K pristine quality, 28 Mbps for 1080p crisp clarity
       const bitrate = is4K ? 60000000 : (exportMode === '1080p' ? 28000000 : 14000000);
-      // Prioritize modern codecs (VP9, H264) over ancient VP8 to guarantee vibrant colors & crisp sharpness
-      const supportedMimes = [
+      // Check for native MP4 or high-compatibility codecs first
+      const supportedMimes = isTransparent4K ? [
         'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp9',
+        'video/webm'
+      ] : [
+        'video/mp4;codecs=avc1,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
         'video/webm;codecs=h264,opus',
         'video/webm;codecs=h264',
-        'video/mp4;codecs=avc1',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp9',
         'video/webm;codecs=vp8,opus',
         'video/webm;codecs=vp8',
         'video/webm'
@@ -361,15 +367,16 @@ export default function VideoExportModal({
           finalFilename = `CaptioniX_4K_Transparent_Overlay_${aspectRatio.replace(':', 'x')}.webm`;
         }
 
-        // For transparent overlay mode (alpha WebM for Premiere/DaVinci), patch duration header
+        // For transparent overlay mode (alpha WebM for Premiere/DaVinci), patch duration header keeping alpha
         if (isTransparent4K) {
           try {
-            downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000));
+            downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000), false);
           } catch (patchErr) {
             console.warn("WebM duration header notice:", patchErr);
           }
         } else {
-          // For all full video exports, remux clean rawBlob into universal standard MP4 via FFmpeg
+          let remuxSuccessful = false;
+          // Try local FFmpeg remux server first if available (e.g. localhost)
           try {
             setBurnStatus('Converting to universal MP4 with anti-freeze PTS sync & Rec.709 colors...');
             const remuxResp = await fetch('/api/remux-video', {
@@ -386,14 +393,18 @@ export default function VideoExportModal({
 
             if (remuxResp.ok) {
               downloadBlob = await remuxResp.blob();
-            } else {
-              console.warn("Local remux returned non-200, downloading patched video directly");
-              if (!downloadBlob.type.includes('mp4')) {
-                finalFilename = finalFilename.replace(/\.mp4$/, '.webm');
-              }
+              remuxSuccessful = true;
             }
           } catch (remuxErr) {
-            console.warn("Local remux server notice:", remuxErr);
+            console.warn("Local remux server unavailable (e.g. static host/Vercel):", remuxErr);
+          }
+
+          // If remux is not available (e.g. static Vercel deployment), sanitize WebM:
+          // 1. Reset AlphaMode from 1 to 0 (so Totem / GStreamer won't crash looking for non-existent alpha buffers)
+          // 2. Inject accurate duration and timecode metadata so seek bar and length are 100% correct
+          if (!remuxSuccessful) {
+            setBurnStatus('Finalizing standalone high-compatibility video file...');
+            downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000), true);
             if (!downloadBlob.type.includes('mp4')) {
               finalFilename = finalFilename.replace(/\.mp4$/, '.webm');
             }
