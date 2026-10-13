@@ -1,0 +1,734 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@400;600;700;900&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@500;700&display=swap');
+
+:root {
+  --bg-primary: #0a0d14;
+  --bg-secondary: #0f1422;
+  --bg-card: rgba(18, 24, 38, 0.7);
+  --bg-card-hover: rgba(28, 36, 56, 0.85);
+  --bg-glass: rgba(15, 23, 42, 0.65);
+  
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(99, 102, 241, 0.35);
+  --border-focus: #6366f1;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  --accent-indigo: #6366f1;
+  --accent-indigo-hover: #4f46e5;
+  --accent-cyan: #06b6d4;
+  --accent-amber: #f59e0b;
+  --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+  --accent-purple: #a855f7;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow-glow: 0 0 25px -5px rgba(99, 102, 241, 0.35);
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  --font-outfit: 'Outfit', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  --font-plusjakartasans: 'Plus Jakarta Sans', sans-serif;
+  --font-bebas: 'Bebas Neue', sans-serif;
+  --font-montserrat: 'Montserrat', sans-serif;
+  --font-urdu: 'Noto Nastaliq Urdu', serif;
+  --font-cinzel: 'Cinzel', serif;
+  --font-spacegrotesk: 'Space Grotesk', monospace;
+
+  font-family: var(--font-sans);
+  color-scheme: dark;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+              radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.1) 0%, transparent 45%),
+              radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 60%),
+              var(--bg-primary);
+  background-attachment: fixed;
+  overflow-x: hidden;
+  color: var(--text-main);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.btn-danger:hover {
+  background: rgba(244, 63, 94, 0.25);
+}
+
+/* Inputs & Selects */
+.input-field, .textarea-field, .select-field {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.input-field:focus, .textarea-field:focus, .select-field:focus {
+  border-color: var(--accent-indigo);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  background: rgba(15, 23, 42, 0.95);
+}
+.select-field option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+/* Animations */
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes bounceWord {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-5px) scale(1.1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.6)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.9)); }
+}
+
+/* Subtitle Overlays Styles */
+.caption-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  z-index: 30;
+  transition: top 0.2s ease;
+}
+
+/* Hormozi Style */
+.caption-style-hormozi {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.9));
+}
+.caption-style-hormozi .regular-word {
+  color: #ffffff;
+  -webkit-text-stroke: 1.5px #000000;
+}
+.caption-style-hormozi .active-word {
+  color: #facc15;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 2px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  -webkit-text-stroke: 1.5px #000000;
+  transform: scale(1.12);
+  animation: bounceWord 0.3s ease;
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.4);
+}
+
+/* Glow Style */
+.caption-style-glow {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 20px #06b6d4, 0 0 40px #06b6d4, 0 2px 4px #000;
+}
+.caption-style-glow .active-word {
+  color: #38bdf8;
+  text-shadow: 0 0 25px #38bdf8, 0 0 50px #0284c7;
+  display: inline-block;
+  transform: scale(1.1);
+}
+
+/* Minimalist Pill */
+.caption-style-minimal {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 8px 18px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: inline-block;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+.caption-style-minimal .active-word {
+  color: #6366f1;
+  font-weight: 700;
+}
+
+/* Neon Cyberpunk */
+.caption-style-neon {
+  font-family: var(--font-bebas);
+  font-size: 1.35em;
+  letter-spacing: 1.5px;
+  color: #f43f5e;
+  text-shadow: 0 0 10px #f43f5e, 0 0 25px #e11d48;
+}
+.caption-style-neon .active-word {
+  color: #a855f7;
+  text-shadow: 0 0 15px #c084fc, 0 0 30px #a855f7;
+}
+
+/* Comic Punch */
+.caption-style-comic {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  color: #111827;
+  background: #facc15;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 3px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+  display: inline-block;
+  transform: rotate(-1.5deg);
+}
+.caption-style-comic .active-word {
+  color: #dc2626;
+  text-decoration: underline;
+  transform: scale(1.08);
+  display: inline-block;
+}
+
+/* CapCut Viral */
+.caption-style-capcut {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #ffffff;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.95));
+}
+.caption-style-capcut .regular-word {
+  color: #ffffff;
+  -webkit-text-stroke: 1.5px #000000;
+}
+.caption-style-capcut .active-word {
+  color: #10b981;
+  -webkit-text-stroke: 1.5px #000000;
+  display: inline-block;
+  transform: scale(1.15);
+  animation: bounceWord 0.25s ease;
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.8));
+}
+
+/* Netflix Cinema */
+.caption-style-netflix {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: inline-block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.caption-style-netflix .active-word {
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+/* TikTok Box Highlight */
+.caption-style-tiktok {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  color: #ffffff;
+  text-transform: uppercase;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.9));
+}
+.caption-style-tiktok .regular-word {
+  color: #ffffff;
+  -webkit-text-stroke: 1px #000000;
+}
+.caption-style-tiktok .active-word {
+  color: #000000;
+  background: #facc15;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  transform: scale(1.08);
+  box-shadow: 0 4px 10px rgba(250, 204, 21, 0.5);
+}
+
+/* Karaoke Pulse */
+.caption-style-karaoke {
+  font-family: var(--font-montserrat);
+  font-weight: 800;
+  line-height: 1.25;
+}
+.caption-style-karaoke .regular-word {
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.2s ease;
+}
+.caption-style-karaoke .active-word {
+  color: #fbbf24;
+  text-shadow: 0 0 15px rgba(251, 191, 36, 0.8);
+  transform: scale(1.15);
+  display: inline-block;
+}
+
+/* Ali Abdaal Clean Studio */
+.caption-style-abdaal {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: #f8fafc;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8));
+}
+.caption-style-abdaal .active-word {
+  color: #c084fc;
+  font-weight: 800;
+  display: inline-block;
+  transform: scale(1.08);
+  text-shadow: 0 0 12px rgba(192, 132, 252, 0.6);
+}
+
+/* Red Alert Box */
+.caption-style-redalert {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  background: #dc2626;
+  color: #ffffff;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 2px solid #ffffff;
+  display: inline-block;
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.7);
+}
+.caption-style-redalert .active-word {
+  color: #fef08a;
+  text-decoration: underline;
+  transform: scale(1.1);
+  display: inline-block;
+}
+
+/* 80s Synthwave */
+.caption-style-synthwave {
+  font-family: var(--font-bebas);
+  font-size: 1.3em;
+  letter-spacing: 2px;
+  color: #f43f5e;
+  text-shadow: 0 0 10px #f43f5e, 0 0 20px #06b6d4;
+}
+.caption-style-synthwave .active-word {
+  color: #22d3ee;
+  text-shadow: 0 0 15px #22d3ee, 0 0 30px #06b6d4;
+  display: inline-block;
+  transform: scale(1.12);
+}
+
+/* Rapid 1-Word Impact */
+.caption-style-rapid {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.95));
+}
+.caption-style-rapid .active-word {
+  color: #facc15;
+  -webkit-text-stroke: 2px #000000;
+  display: inline-block;
+  transform: scale(1.25);
+  animation: bounceWord 0.2s ease;
+  text-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
+}
+
+/* Kalakar Signature: Bubble Style */
+.caption-style-bubble {
+  font-family: var(--font-montserrat);
+  font-weight: 800;
+  line-height: 1.3;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.85));
+}
+.caption-style-bubble .regular-word {
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+.caption-style-bubble .active-word {
+  color: #0f172a;
+  background: #38bdf8;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  display: inline-block;
+  font-weight: 900;
+  transform: scale(1.14);
+  animation: bounceWord 0.25s ease;
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.7);
+}
+
+/* Kalakar Signature: Raj Shamani Podcast */
+.caption-style-raj {
+  font-family: var(--font-montserrat);
+  font-weight: 800;
+  line-height: 1.25;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.95));
+}
+.caption-style-raj .regular-word {
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+.caption-style-raj .active-word {
+  color: #facc15;
+  display: inline-block;
+  font-weight: 900;
+  transform: scale(1.15);
+  animation: bounceWord 0.25s ease;
+  text-shadow: 0 0 16px rgba(250, 204, 21, 0.8), 0 2px 4px #000000;
+}
+
+/* Kalakar Signature: Iman Gadzhi Luxury */
+.caption-style-iman {
+  font-family: var(--font-cinzel), serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.95));
+}
+.caption-style-iman .regular-word {
+  color: #cbd5e1;
+  letter-spacing: 1.5px;
+}
+.caption-style-iman .active-word {
+  color: #fbbf24;
+  background: linear-gradient(135deg, #fef08a, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+  font-weight: 900;
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.8));
+}
+
+/* Kalakar Signature: Devin Jatho Kinetic */
+.caption-style-devin {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.95));
+}
+.caption-style-devin .regular-word {
+  color: #ffffff;
+  -webkit-text-stroke: 1.2px #000000;
+}
+.caption-style-devin .active-word {
+  color: #a3e635;
+  -webkit-text-stroke: 1.5px #000000;
+  display: inline-block;
+  transform: scale(1.18);
+  animation: bounceWord 0.25s ease;
+  filter: drop-shadow(0 0 15px rgba(163, 230, 53, 0.9));
+}
+
+/* Kalakar Signature: Mumbai Bollywood Pop */
+.caption-style-mumbai {
+  font-family: var(--font-montserrat);
+  font-weight: 800;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.9));
+}
+.caption-style-mumbai .regular-word {
+  color: #fef08a;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+.caption-style-mumbai .active-word {
+  color: #ffffff;
+  background: linear-gradient(135deg, #f97316, #ec4899);
+  padding: 3px 12px;
+  border-radius: 8px;
+  display: inline-block;
+  font-weight: 900;
+  transform: scale(1.12);
+  box-shadow: 0 4px 18px rgba(249, 115, 22, 0.65);
+}
+
+/* Kalakar Signature: Varun Mayya Cyber */
+.caption-style-varun {
+  font-family: var(--font-spacegrotesk), monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.95));
+}
+.caption-style-varun .regular-word {
+  color: #94a3b8;
+}
+.caption-style-varun .active-word {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.18);
+  border: 1.5px solid #22d3ee;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  font-weight: 800;
+  transform: scale(1.1);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.55);
+}
+
+/* Kalakar Signature: Editing School Dark Capsule */
+.caption-style-skool {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: inline-block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+.caption-style-skool .regular-word {
+  color: #ffffff;
+}
+.caption-style-skool .active-word {
+  color: #4ade80;
+  font-weight: 800;
+  display: inline-block;
+  transform: scale(1.1);
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.7);
+}
+
+/* Nas Daily 1-Minute Highlight Box */
+.caption-style-nas {
+  font-family: var(--font-montserrat);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.95));
+}
+.caption-style-nas .regular-word {
+  color: #ffffff;
+  text-shadow: 0 2px 4px #000000;
+}
+.caption-style-nas .active-word {
+  color: #000000;
+  background: #facc15;
+  padding: 2px 10px;
+  border-radius: 3px;
+  display: inline-block;
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.6);
+}
+
+/* BeerBiceps Spiritual Podcast */
+.caption-style-beerbiceps {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.3;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.9));
+}
+.caption-style-beerbiceps .regular-word {
+  color: #e2e8f0;
+  text-shadow: 0 2px 4px #000000;
+}
+.caption-style-beerbiceps .active-word {
+  color: #f59e0b;
+  display: inline-block;
+  font-weight: 800;
+  transform: scale(1.12);
+  text-shadow: 0 0 18px rgba(245, 158, 11, 0.8), 0 2px 4px #000000;
+}
+
+/* Dhruv Rathee Explainer */
+.caption-style-dhruv {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  background: rgba(10, 20, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 18px;
+  border-radius: 8px;
+  border-left: 4px solid #ef4444;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: inline-block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+.caption-style-dhruv .regular-word {
+  color: #f8fafc;
+}
+.caption-style-dhruv .active-word {
+  color: #f87171;
+  font-weight: 800;
+  display: inline-block;
+  transform: scale(1.08);
+}
+
+/* Social Previews */
+.ig-post-card {
+  max-width: 440px;
+  margin: 0 auto;
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.tiktok-card {
+  max-width: 340px;
+  height: 580px;
+  margin: 0 auto;
+  position: relative;
+  background: #111827;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-indigo {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+.badge-emerald {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.badge-amber {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
