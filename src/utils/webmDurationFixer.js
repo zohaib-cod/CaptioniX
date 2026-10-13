@@ -1,55 +1,61 @@
-import fixDurationLib from 'fix-webm-duration';
-
 /**
- * Sanitizes WebM files produced by MediaRecorder:
- * 1. Resets erroneous AlphaMode (0x53 0xC0) inserted by Chromium for canvas streams,
- *    which prevents GStreamer / Totem player crashes ("Cannot handle streams without an initial alpha buffer").
- * 2. Injects accurate duration and timecode metadata so all video players (Totem, VLC, QuickTime,
- *    Windows Media Player) display accurate duration and seek bars.
+ * Fixes WebM files produced by MediaRecorder in Chrome/Firefox.
+ * MediaRecorder produces WebM files with missing or zero duration in the EBML header,
+ * which causes players like VLC, Windows Media Player, and GNOME Videos to show 0:00 or 0:02 duration.
+ * This utility writes the accurate duration into the WebM Segment Info header.
  */
-export async function fixWebmDuration(blob, durationMs, disableAlpha = true) {
+
+export async function fixWebmDuration(blob, durationMs) {
   try {
-    let cleanBlob = blob;
+    const arrayBuffer = await blob.arrayBuffer();
+    const dataView = new DataView(arrayBuffer);
+    const uint8 = new Uint8Array(arrayBuffer);
 
-    if (disableAlpha) {
-      try {
-        const arrayBuffer = await blob.arrayBuffer();
-        const u8 = new Uint8Array(arrayBuffer);
-        let modified = false;
-
-        // Search for AlphaMode tag (0x53 0xC0) in the Track definition (first 32KB)
-        for (let i = 0; i < Math.min(u8.length - 4, 32768); i++) {
-          if (u8[i] === 0x53 && u8[i + 1] === 0xc0) {
-            const len = u8[i + 2] & 0x7f;
-            if (len === 1 && u8[i + 3] !== 0) {
-              u8[i + 3] = 0; // Turn off AlphaMode
-              modified = true;
-            }
-          }
-        }
-
-        if (modified) {
-          cleanBlob = new Blob([u8], { type: blob.type || 'video/webm' });
-        }
-      } catch (alphaErr) {
-        console.warn("AlphaMode patch notice:", alphaErr);
+    // Search for EBML Segment (0x18538067) and Info (0x1549A966)
+    let infoPos = -1;
+    for (let i = 0; i < Math.min(uint8.length - 4, 8192); i++) {
+      if (
+        uint8[i] === 0x15 &&
+        uint8[i + 1] === 0x49 &&
+        uint8[i + 2] === 0xa9 &&
+        uint8[i + 3] === 0x66
+      ) {
+        infoPos = i;
+        break;
       }
     }
 
-    if (durationMs && durationMs > 0) {
-      try {
-        const fixFn = typeof fixDurationLib === 'function' ? fixDurationLib : fixDurationLib?.default;
-        if (typeof fixFn === 'function') {
-          cleanBlob = await fixFn(cleanBlob, Math.round(durationMs));
-        }
-      } catch (durErr) {
-        console.warn("Duration injection notice:", durErr);
+    if (infoPos === -1) {
+      // Info element not found in first 8KB, return original blob
+      return blob;
+    }
+
+    // Search for Duration tag (0x44 0x89) inside Info element
+    let durationPos = -1;
+    for (let i = infoPos; i < Math.min(infoPos + 512, uint8.length - 3); i++) {
+      if (uint8[i] === 0x44 && uint8[i + 1] === 0x89) {
+        durationPos = i;
+        break;
       }
     }
 
-    return cleanBlob;
+    if (durationPos !== -1) {
+      const lenByte = uint8[durationPos + 2];
+      const dataLen = lenByte & 0x7f;
+      if (dataLen === 4) {
+        // 4-byte Float (Float32)
+        dataView.setFloat32(durationPos + 3, durationMs, false);
+        return new Blob([arrayBuffer], { type: blob.type || 'video/webm' });
+      } else if (dataLen === 8) {
+        // 8-byte Float (Float64)
+        dataView.setFloat64(durationPos + 3, durationMs, false);
+        return new Blob([arrayBuffer], { type: blob.type || 'video/webm' });
+      }
+    }
+
+    return blob;
   } catch (err) {
-    console.warn("WebM metadata fixer error:", err);
+    console.warn("Could not patch WebM duration header:", err);
     return blob;
   }
 }

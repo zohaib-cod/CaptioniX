@@ -11,9 +11,7 @@
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
-    "fix-webm-duration": "^1.0.6",
     "lucide-react": "^1.55.0",
-    "mp4-muxer": "^5.2.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
