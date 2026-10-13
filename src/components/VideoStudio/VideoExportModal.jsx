@@ -115,16 +115,20 @@ export default function VideoExportModal({
         video.onerror = () => {
           if (!settled) {
             settled = true;
-            reject(new Error(video.error ? video.error.message : 'Video could not be loaded'));
+            reject(new Error(video.error ? video.error.message : 'Video could not be loaded. Please ensure the video link is accessible or upload a local file.'));
           }
         };
         video.load();
         setTimeout(() => {
           if (!settled) {
             settled = true;
-            resolve();
+            if (video.readyState < 2) {
+              reject(new Error("Video could not be loaded (network timeout or CORS restricted)."));
+            } else {
+              resolve();
+            }
           }
-        }, 5000);
+        }, 8000);
       });
 
       // Resolve accurate duration if browser initially reports Infinity on blob URLs
@@ -341,15 +345,6 @@ export default function VideoExportModal({
         const rawMime = mediaRecorder.mimeType || 'video/webm';
         let rawBlob = new Blob(chunks, { type: rawMime });
 
-        // Step 1: Patch WebM EBML duration header so VLC, GNOME Videos, CapCut see full accurate duration
-        if (!rawMime.includes('mp4')) {
-          try {
-            rawBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000));
-          } catch (patchErr) {
-            console.warn("WebM duration header notice:", patchErr);
-          }
-        }
-
         let downloadBlob = rawBlob;
         let finalFilename = '';
         let targetExt = isTransparent4K ? 'webm' : 'mp4';
@@ -366,8 +361,15 @@ export default function VideoExportModal({
           finalFilename = `CaptioniX_4K_Transparent_Overlay_${aspectRatio.replace(':', 'x')}.webm`;
         }
 
-        // Step 2: For full video exports (non-alpha), remux to 100% compliant universal MP4 with AAC audio
-        if (!isTransparent4K) {
+        // For transparent overlay mode (alpha WebM for Premiere/DaVinci), patch duration header
+        if (isTransparent4K) {
+          try {
+            downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000));
+          } catch (patchErr) {
+            console.warn("WebM duration header notice:", patchErr);
+          }
+        } else {
+          // For all full video exports, remux clean rawBlob into universal standard MP4 via FFmpeg
           try {
             setBurnStatus('Converting to universal MP4 with anti-freeze PTS sync & Rec.709 colors...');
             const remuxResp = await fetch('/api/remux-video', {
@@ -391,7 +393,7 @@ export default function VideoExportModal({
               }
             }
           } catch (remuxErr) {
-            console.warn("Local remux server not active (static deployment), exporting patched video directly:", remuxErr);
+            console.warn("Local remux server notice:", remuxErr);
             if (!downloadBlob.type.includes('mp4')) {
               finalFilename = finalFilename.replace(/\.mp4$/, '.webm');
             }

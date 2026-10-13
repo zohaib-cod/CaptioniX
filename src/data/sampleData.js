@@ -5,7 +5,7 @@ export const SAMPLE_VIDEOS = [
     id: 'demo-roman-urdu',
     title: '🇵🇰 Roman Urdu / Urdish Reel (9:16)',
     aspectRatio: '9:16',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url: '/videos/demo-roman-urdu.mp4',
     poster: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80',
     duration: 15,
     subtitles: [
@@ -88,7 +88,7 @@ export const SAMPLE_VIDEOS = [
     id: 'demo-reel',
     title: '📱 Motivational Reel (Vertical 9:16)',
     aspectRatio: '9:16',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url: '/videos/demo-reel.mp4',
     poster: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80',
     duration: 15,
     subtitles: [
@@ -175,7 +175,7 @@ export const SAMPLE_VIDEOS = [
     id: 'demo-podcast',
     title: '🎙️ Business Podcast (Vertical 9:16)',
     aspectRatio: '9:16',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    url: '/videos/demo-podcast.mp4',
     poster: 'https://images.unsplash.com/photo-1590602847861-f357a9332bbc?w=600&q=80',
     duration: 15,
     subtitles: [
@@ -249,7 +249,7 @@ export const SAMPLE_VIDEOS = [
     id: 'demo-cinematic',
     title: '🎬 Cinematic Vlog (Horizontal 16:9)',
     aspectRatio: '16:9',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    url: '/videos/demo-cinematic.mp4',
     poster: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80',
     duration: 15,
     subtitles: [

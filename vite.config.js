@@ -40,7 +40,7 @@ function ffmpegRemuxPlugin() {
               '-i', tmpIn,
               // Strictly normalizes all timestamps to monotonic intervals (prevents freezing/stutter)
               '-vf', `fps=${targetFps},setpts=N/(${targetFps}*TB),format=yuv420p`,
-              '-vsync', 'cfr',
+              '-fps_mode', 'cfr',
               '-c:v', 'libx264',
               '-preset', 'fast',
               '-crf', crfVal,
@@ -50,6 +50,8 @@ function ffmpegRemuxPlugin() {
               '-color_primaries', 'bt709',
               '-color_trc', 'bt709',
               '-color_range', 'tv',
+              '-map', '0:v:0',
+              '-map', '0:a:0?',
               '-c:a', 'aac',
               '-b:a', '256k',
               '-af', 'aresample=async=1',
