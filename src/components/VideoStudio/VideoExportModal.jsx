@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Download, FileText, Video, Copy, Check, Sparkles, Loader2, Info, Layers, MonitorPlay, Minimize2, Maximize2, Minus } from 'lucide-react';
+import { X, Download, FileText, Video, Copy, Check, Sparkles, Loader2, Info, Layers, MonitorPlay, Minimize2, Maximize2, Minus, AlertTriangle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { generateSRT, generateVTT, downloadFile } from '../../utils/subtitleExporter';
 import { fixWebmDuration } from '../../utils/webmDurationFixer';
@@ -20,7 +20,7 @@ export default function VideoExportModal({
   const [isBurning, setIsBurning] = useState(false);
   const [burnProgress, setBurnProgress] = useState(0);
   const [burnStatus, setBurnStatus] = useState('');
-  const [exportMode, setExportMode] = useState('original'); // 'original' (Exact Upload Match) | '1080p' | '4k_full' | '720p' | '4k_transparent'
+  const [exportMode, setExportMode] = useState('original'); // 'original' | 'capcut_transparent' | '1080p' | '4k_full' | '720p' | 'capcut_green' | '4k_transparent'
   const [detectedResolution, setDetectedResolution] = useState(null);
   const [isMinimized, setIsMinimized] = useState(false);
   const cancelRef = React.useRef(false);
@@ -82,8 +82,9 @@ export default function VideoExportModal({
     setBurnStatus('Initializing video encoder...');
 
     try {
+      // Must stay within viewport coordinates so Chromium compositor NEVER throttles requestVideoFrameCallback
       const offscreenDiv = document.createElement('div');
-      offscreenDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-9999;';
+      offscreenDiv.style.cssText = 'position:fixed;bottom:2px;right:2px;width:4px;height:4px;opacity:0.01;pointer-events:none;z-index:99999;overflow:hidden;';
       document.body.appendChild(offscreenDiv);
 
       const video = document.createElement('video');
@@ -157,17 +158,35 @@ export default function VideoExportModal({
       }
 
       const isOriginal = exportMode === 'original';
+      const isCapcutProRes = exportMode === 'capcut_transparent';
       const isTransparent4K = exportMode === '4k_transparent';
+      const isTransparent = isCapcutProRes || isTransparent4K;
+      const isGreenScreen = exportMode === 'capcut_green';
       const vW = video.videoWidth || (aspectRatio === '9:16' ? 1080 : 1920);
       const vH = video.videoHeight || (aspectRatio === '9:16' ? 1920 : 1080);
       const is4K = exportMode === '4k_full' || isTransparent4K || (isOriginal && (vW >= 2160 || vH >= 2160));
 
       // Determine canvas dimensions based on chosen mode and native aspect ratio
       let width, height;
-      if (isOriginal && video.videoWidth && video.videoHeight) {
+      if (isCapcutProRes || isGreenScreen) {
+        // High-resolution export for CapCut & Premiere overlays:
+        // Must ALWAYS be rendered at crystal-clear Full HD (min 1080p) or 4K so it never gets stretched/blurred
+        if (aspectRatio === '9:16') {
+          width = Math.max(1080, video.videoWidth && video.videoWidth >= 1080 ? video.videoWidth : 1080);
+          height = Math.max(1920, video.videoHeight && video.videoHeight >= 1920 ? video.videoHeight : 1920);
+        } else if (aspectRatio === '1:1') {
+          width = Math.max(1080, video.videoWidth && video.videoWidth >= 1080 ? video.videoWidth : 1080);
+          height = Math.max(1080, video.videoHeight && video.videoHeight >= 1080 ? video.videoHeight : 1080);
+        } else {
+          width = Math.max(1920, video.videoWidth && video.videoWidth >= 1920 ? video.videoWidth : 1920);
+          height = Math.max(1080, video.videoHeight && video.videoHeight >= 1080 ? video.videoHeight : 1080);
+        }
+        width = width % 2 === 0 ? width : width - 1;
+        height = height % 2 === 0 ? height : height - 1;
+      } else if (isOriginal && video.videoWidth && video.videoHeight) {
         width = video.videoWidth;
         height = video.videoHeight;
-        // Ensure even dimensions required by H.264
+        // Ensure even dimensions required by H.264 & ProRes
         width = width % 2 === 0 ? width : width - 1;
         height = height % 2 === 0 ? height : height - 1;
       } else if (exportMode === '4k_full' || isTransparent4K) {
@@ -211,10 +230,11 @@ export default function VideoExportModal({
       canvas.width = width;
       canvas.height = height;
       // CRITICAL: alpha: false on non-transparent export prevents premultiplied alpha color corruption!
+      // desynchronized MUST be false to ensure clean buffer clearing without ghosting/concentric ring artifacts!
       const ctx = canvas.getContext('2d', {
-        alpha: isTransparent4K,
+        alpha: isTransparent,
         colorSpace: 'srgb',
-        desynchronized: true
+        desynchronized: false
       });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
@@ -265,19 +285,30 @@ export default function VideoExportModal({
       }
 
       let mediaRecorder;
+      let chosenMime = '';
       // High-fidelity bitrate: 60 Mbps for 4K pristine quality, 28 Mbps for 1080p crisp clarity
-      const bitrate = is4K ? 60000000 : (exportMode === '1080p' ? 28000000 : 14000000);
-      // Prioritize modern codecs (VP9, H264) over ancient VP8 to guarantee vibrant colors & crisp sharpness
-      const supportedMimes = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=h264,opus',
-        'video/webm;codecs=h264',
-        'video/mp4;codecs=avc1',
-        'video/webm;codecs=vp8,opus',
-        'video/webm;codecs=vp8',
-        'video/webm'
-      ];
+      const bitrate = is4K ? 60000000 : (exportMode === '1080p' || isCapcutProRes ? 28000000 : 14000000);
+      
+      // When exporting transparent video, strictly use codecs with alpha channel support (VP9/VP8)
+      // Never use H264 or MP4 for transparent recording because they strip the alpha channel!
+      const supportedMimes = isTransparent
+        ? [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8,opus',
+            'video/webm;codecs=vp8',
+            'video/webm'
+          ]
+        : [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=h264,opus',
+            'video/webm;codecs=h264',
+            'video/mp4;codecs=avc1',
+            'video/webm;codecs=vp8,opus',
+            'video/webm;codecs=vp8',
+            'video/webm'
+          ];
       for (const mime of supportedMimes) {
         if (MediaRecorder.isTypeSupported(mime)) {
           try {
@@ -285,12 +316,14 @@ export default function VideoExportModal({
               mimeType: mime,
               videoBitsPerSecond: bitrate
             });
+            chosenMime = mime;
             break;
           } catch (e) {}
         }
       }
       if (!mediaRecorder) {
         mediaRecorder = new MediaRecorder(combinedStream);
+        chosenMime = mediaRecorder.mimeType || 'video/webm';
       }
 
       const chunks = [];
@@ -347,7 +380,7 @@ export default function VideoExportModal({
 
         let downloadBlob = rawBlob;
         let finalFilename = '';
-        let targetExt = isTransparent4K ? 'webm' : 'mp4';
+        let targetExt = isCapcutProRes ? 'mov' : (isTransparent4K ? 'webm' : 'mp4');
 
         if (isOriginal) {
           finalFilename = `CaptioniX_Original_${width}x${height}.${targetExt}`;
@@ -357,12 +390,46 @@ export default function VideoExportModal({
           finalFilename = `CaptioniX_1080p_FullHD_Video_${aspectRatio.replace(':', 'x')}.${targetExt}`;
         } else if (exportMode === '720p') {
           finalFilename = `CaptioniX_720p_HD_Video_${aspectRatio.replace(':', 'x')}.${targetExt}`;
+        } else if (isGreenScreen) {
+          finalFilename = `CaptioniX_CapCut_GreenScreen_Overlay_${aspectRatio.replace(':', 'x')}.mp4`;
+        } else if (isCapcutProRes) {
+          finalFilename = `CaptioniX_CapCut_Transparent_Overlay_${aspectRatio.replace(':', 'x')}.mov`;
         } else {
           finalFilename = `CaptioniX_4K_Transparent_Overlay_${aspectRatio.replace(':', 'x')}.webm`;
         }
 
-        // For transparent overlay mode (alpha WebM for Premiere/DaVinci), patch duration header keeping alpha
-        if (isTransparent4K) {
+        // Remuxing & file finalization
+        if (isCapcutProRes) {
+          let remuxSuccessful = false;
+          try {
+            setBurnStatus('Converting to Apple ProRes 4444 MOV with 100% native transparency for CapCut...');
+            const remuxResp = await fetch('/api/remux-video', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'video/webm',
+                'x-filename': finalFilename,
+                'x-fps': String(targetFps),
+                'x-is-transparent': 'true',
+                'x-source-codec': chosenMime.includes('vp8') ? 'vp8' : 'vp9'
+              },
+              body: rawBlob
+            });
+
+            if (remuxResp.ok) {
+              downloadBlob = await remuxResp.blob();
+              remuxSuccessful = true;
+            }
+          } catch (remuxErr) {
+            console.warn("Remux error for ProRes MOV:", remuxErr);
+          }
+
+          if (!remuxSuccessful) {
+            setBurnStatus('Finalizing transparent WebM overlay...');
+            downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000), false);
+            finalFilename = finalFilename.replace(/\.mov$/, '.webm');
+          }
+        } else if (isTransparent4K) {
+          // For raw transparent overlay mode (alpha WebM for Premiere/DaVinci), patch duration header keeping alpha
           try {
             downloadBlob = await fixWebmDuration(rawBlob, Math.round(totalDuration * 1000), false);
           } catch (patchErr) {
@@ -421,6 +488,15 @@ export default function VideoExportModal({
         try { offscreenDiv.remove(); } catch {}
         confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
       };
+
+      // Ensure all custom fonts (Noto Nastaliq Urdu, Montserrat, Cinzel, etc.) are 100% loaded before rendering
+      try {
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+        }
+      } catch (fontErr) {
+        console.warn("Fonts ready check notice:", fontErr);
+      }
 
       // Flush buffer chunks every 400ms to keep RAM footprint low (<250MB) even in 4K
       mediaRecorder.start(400);
@@ -488,9 +564,13 @@ export default function VideoExportModal({
           return;
         }
 
-        if (isTransparent4K) {
+        if (isTransparent) {
           // Transparent background: clear entire canvas with alpha 0
           ctx.clearRect(0, 0, width, height);
+        } else if (isGreenScreen) {
+          // Solid green screen background for CapCut Chroma Key overlay
+          ctx.fillStyle = '#00FF00';
+          ctx.fillRect(0, 0, width, height);
         } else {
           // Draw video background with high-quality aspect-fit cover (preserves true native proportions)
           const srcAspect = vW / vH;
@@ -549,8 +629,13 @@ export default function VideoExportModal({
           const posY = height * ((activeStyle.position || 75) / 100);
           const baseScale = width / 400;
           const scaledFontSize = Math.round((activeStyle.fontSize || 24) * baseScale);
-          const fontFamily = activeStyle.fontFamily || 'Montserrat';
           const sid = activeStyle.id || 'hormozi';
+
+          // Detect Urdu / Arabic / RTL script
+          const isSubRTL = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(currentSub.text || '');
+          const fontFamily = isSubRTL
+            ? "'Noto Nastaliq Urdu', 'Montserrat', sans-serif"
+            : `${activeStyle.fontFamily || 'Montserrat'}, sans-serif`;
 
           ctx.textBaseline = 'middle';
 
@@ -565,15 +650,32 @@ export default function VideoExportModal({
           };
           const fontWeight = getFontWeight();
 
+          // Strictly 1 active word to prevent double highlight blobs
+          let activeWordIdx = -1;
+          for (let i = 0; i < visibleWords.length; i++) {
+            const w = visibleWords[i];
+            const isLast = i === visibleWords.length - 1;
+            if (curTime >= w.start && (isLast ? curTime <= w.end : curTime < w.end)) {
+              activeWordIdx = i;
+              break;
+            }
+          }
+          if (activeWordIdx === -1 && visibleWords.length > 0) {
+            const matching = visibleWords.filter(w => curTime >= w.start);
+            if (matching.length > 0) {
+              activeWordIdx = visibleWords.indexOf(matching[matching.length - 1]);
+            }
+          }
+
           // Measure words individually
-          ctx.font = `${fontWeight} ${scaledFontSize}px ${fontFamily}, sans-serif`;
+          ctx.font = `${fontWeight} ${scaledFontSize}px ${fontFamily}`;
           const spaceWidth = ctx.measureText(' ').width;
 
-          const measuredWords = visibleWords.map(w => {
-            const isWordActive = curTime >= w.start && curTime <= w.end;
+          const measuredWords = visibleWords.map((w, idx) => {
+            const isWordActive = idx === activeWordIdx;
             const wordFontSize = isWordActive ? Math.round(scaledFontSize * 1.18) : scaledFontSize;
             const wordFontWeight = isWordActive ? Math.min(900, fontWeight + 100) : fontWeight;
-            ctx.font = `${wordFontWeight} ${wordFontSize}px ${fontFamily}, sans-serif`;
+            ctx.font = `${wordFontWeight} ${wordFontSize}px ${fontFamily}`;
             const wordText = activeStyle.textTransform === 'uppercase' ? w.word.toUpperCase() : w.word;
             const wordWidth = ctx.measureText(wordText).width;
             return {
@@ -636,6 +738,17 @@ export default function VideoExportModal({
 
           // Returns the correct active word fill color matching the CSS preview
           const getActiveWordColor = () => {
+            // For bright background pill styles, black text provides maximum contrast
+            if (['tiktok', 'nas'].includes(sid)) {
+              return '#000000';
+            }
+            if (sid === 'bubble') {
+              return '#0f172a';
+            }
+            // If user customized the active word color in the UI, use user's custom color!
+            if (activeStyle.activeColor && activeStyle.activeColor !== 'inherit') {
+              return activeStyle.activeColor;
+            }
             switch (sid) {
               case 'hormozi':   return '#facc15';
               case 'capcut':    return '#10b981';
@@ -676,8 +789,8 @@ export default function VideoExportModal({
           // Does the active word get its own per-word background pill?
           const hasActiveWordBg = ['hormozi', 'bubble', 'nas', 'tiktok', 'mumbai', 'varun'].includes(sid);
 
-          // Does this style need glow/text-shadow effects?
-          const hasGlowEffect = ['glow', 'neon', 'synthwave', 'devin', 'karaoke', 'raj', 'beerbiceps', 'abdaal', 'varun', 'skool', 'redalert', 'bubble', 'rapid', 'mumbai'].includes(sid);
+          // Does this style need glow/text-shadow effects? Only true neon/glow styles
+          const hasGlowEffect = ['glow', 'neon', 'synthwave'].includes(sid);
 
           // Render each wrapped line
           lines.forEach((line, lineIdx) => {
@@ -761,21 +874,21 @@ export default function VideoExportModal({
             }
 
             // ── DRAW EACH WORD ──
-            let curWordX = (width / 2) - (lineWidth / 2);
-            line.words.forEach(w => {
+            const drawSingleWord = (w, curWordX) => {
               ctx.save();
               const isWordActive = w.isWordActive;
               const wordFontSize = w.wordFontSize;
               const wFontWeight = w.wordFontWeight;
-              const wordY = isWordActive ? lineY - Math.round(scaledFontSize * 0.1) : lineY;
+              // Keep vertical alignment uniform across all words in line
+              const wordY = lineY;
 
-              ctx.font = `${wFontWeight} ${wordFontSize}px ${fontFamily}, sans-serif`;
+              ctx.font = `${wFontWeight} ${wordFontSize}px ${fontFamily}`;
               ctx.textAlign = 'left';
 
               // ── PER-WORD ACTIVE BACKGROUND (pill behind active word only) ──
               if (isWordActive && hasActiveWordBg) {
-                const wpx = Math.round(10 * s);
-                const wpy = Math.round(4 * s);
+                const wpx = Math.round(wordFontSize * 0.22);
+                const wpy = Math.round(wordFontSize * 0.12);
                 let wBgColor, wRadius;
 
                 switch (sid) {
@@ -789,14 +902,13 @@ export default function VideoExportModal({
                     break;
                   case 'nas':
                     wBgColor = '#facc15';
-                    wRadius = Math.round(3 * s);
+                    wRadius = Math.round(4 * s);
                     break;
                   case 'tiktok':
                     wBgColor = '#facc15';
                     wRadius = Math.round(4 * s);
                     break;
                   case 'mumbai':
-                    // Orange-to-pink gradient approximated as solid orange
                     wBgColor = '#f97316';
                     wRadius = Math.round(8 * s);
                     break;
@@ -823,99 +935,63 @@ export default function VideoExportModal({
                 // Varun: cyan border on active word
                 if (sid === 'varun') {
                   ctx.strokeStyle = '#22d3ee';
-                  ctx.lineWidth = Math.round(1.5 * s);
+                  ctx.lineWidth = Math.max(1, Math.round(1.5 * s));
                   ctx.stroke();
                 }
               }
 
-              // ── TEXT STROKE / OUTLINE ──
-              if (needsStroke()) {
+              // ── CRISP OUTLINE / CONTRAST CONTOUR ──
+              // Note: If word is on a bright pill badge (tiktok, nas, bubble), do NOT draw black stroke over dark text!
+              const isBadgeActive = isWordActive && hasActiveWordBg && ['tiktok', 'nas', 'bubble'].includes(sid);
+              const shouldHeavyStroke = !isBadgeActive && needsStroke();
+
+              if (!isBadgeActive) {
+                ctx.save();
                 ctx.strokeStyle = '#000000';
-                ctx.lineWidth = Math.max(4, Math.round(8 * s));
                 ctx.lineJoin = 'round';
                 ctx.miterLimit = 2;
-                // Active word on rapid gets thicker stroke
-                if (sid === 'rapid' && isWordActive) {
-                  ctx.lineWidth = Math.max(6, Math.round(10 * s));
+
+                if (shouldHeavyStroke) {
+                  // Proportional bold outline for comic/hormozi/capcut styles
+                  const baseStroke = isSubRTL
+                    ? Math.max(1, Math.round(wordFontSize * 0.025))
+                    : Math.max(1.5, Math.round(wordFontSize * 0.05));
+                  ctx.lineWidth = (sid === 'rapid' && isWordActive) ? baseStroke * 1.5 : baseStroke * 2;
+                  ctx.strokeText(w.renderedText, curWordX, wordY);
+                } else {
+                  // Subtle, crisp dark separating contour for high definition legibility
+                  // Guarantees counter holes ('A', 'a', 'o', 'e') remain 100% open, distinct and sharp on all backgrounds
+                  const contourWidth = isWordActive
+                    ? Math.max(1.5, Math.round(wordFontSize * 0.038))
+                    : Math.max(1, Math.round(wordFontSize * 0.022));
+                  ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
+                  ctx.lineWidth = contourWidth;
+                  ctx.strokeText(w.renderedText, curWordX, wordY);
                 }
-                ctx.strokeText(w.renderedText, curWordX, wordY);
+                ctx.restore();
               }
 
-              // ── GLOW / SHADOW EFFECTS ──
+              // ── CLEAN DROP SHADOW / SUBTLE RADIANCE ──
+              // Use clean drop shadow for depth. Avoid large blurry clouds that cause chroma quantization in WebM
               ctx.shadowBlur = 0;
               ctx.shadowColor = 'transparent';
-              if (hasGlowEffect) {
-                if (sid === 'glow') {
-                  ctx.shadowColor = isWordActive ? '#38bdf8' : '#06b6d4';
-                  ctx.shadowBlur = (isWordActive ? 25 : 20) * s;
-                } else if (sid === 'neon') {
-                  ctx.shadowColor = isWordActive ? '#c084fc' : '#f43f5e';
-                  ctx.shadowBlur = (isWordActive ? 30 : 10) * s;
-                } else if (sid === 'synthwave') {
-                  ctx.shadowColor = isWordActive ? '#22d3ee' : '#f43f5e';
-                  ctx.shadowBlur = (isWordActive ? 30 : 10) * s;
-                } else if (sid === 'devin') {
-                  if (isWordActive) {
-                    ctx.shadowColor = '#a3e635';
-                    ctx.shadowBlur = 15 * s;
-                  }
-                } else if (sid === 'karaoke') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(251, 191, 36, 0.8)';
-                    ctx.shadowBlur = 15 * s;
-                  }
-                } else if (sid === 'raj') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(250, 204, 21, 0.8)';
-                    ctx.shadowBlur = 16 * s;
-                  }
-                } else if (sid === 'beerbiceps') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(245, 158, 11, 0.8)';
-                    ctx.shadowBlur = 18 * s;
-                  }
-                } else if (sid === 'abdaal') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(192, 132, 252, 0.6)';
-                    ctx.shadowBlur = 12 * s;
-                  }
-                } else if (sid === 'skool') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(74, 222, 128, 0.7)';
-                    ctx.shadowBlur = 12 * s;
-                  }
-                } else if (sid === 'varun') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(34, 211, 238, 0.55)';
-                    ctx.shadowBlur = 14 * s;
-                  }
-                } else if (sid === 'bubble') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(56, 189, 248, 0.7)';
-                    ctx.shadowBlur = 18 * s;
-                  }
-                } else if (sid === 'rapid') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(250, 204, 21, 0.6)';
-                    ctx.shadowBlur = 20 * s;
-                  }
-                } else if (sid === 'mumbai') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(249, 115, 22, 0.65)';
-                    ctx.shadowBlur = 18 * s;
-                  }
-                } else if (sid === 'redalert') {
-                  if (isWordActive) {
-                    ctx.shadowColor = 'rgba(220, 38, 38, 0.7)';
-                    ctx.shadowBlur = 20 * s;
-                  }
-                } else if (isWordActive) {
-                  ctx.shadowColor = activeStyle.activeColor || '#fde047';
-                  ctx.shadowBlur = 26 * s;
-                }
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
+
+              if (hasGlowEffect && isWordActive && !isBadgeActive) {
+                // Tight radiant aura (max 4-6px) for neon styles without muddy halos
+                const activeColor = getActiveWordColor();
+                ctx.shadowColor = activeColor || 'rgba(250, 204, 21, 0.8)';
+                ctx.shadowBlur = Math.min(4 * s, 6);
+              } else if (!isBadgeActive) {
+                // Crisp subtle drop shadow for depth and separation
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+                ctx.shadowBlur = Math.min(3 * s, 6);
+                ctx.shadowOffsetY = Math.max(1, Math.round(2 * s));
               }
 
-              // ── FILL COLOR (active vs regular) ──
+              // ── SOLID VIBRANT TEXT FILL ──
+              // Always draw solid, 100% opaque, high-contrast text
               if (isWordActive) {
                 ctx.fillStyle = getActiveWordColor();
               } else {
@@ -923,10 +999,28 @@ export default function VideoExportModal({
               }
 
               ctx.fillText(w.renderedText, curWordX, wordY);
+              ctx.shadowBlur = 0;
+              ctx.shadowColor = 'transparent';
+              ctx.shadowOffsetY = 0;
               ctx.restore();
+            };
 
-              curWordX += w.wordWidth + spaceWidth;
-            });
+            if (isSubRTL) {
+              // RTL: Start at line right edge, placing first word on the far right
+              let curWordRight = (width / 2) + (lineWidth / 2);
+              line.words.forEach(w => {
+                const curWordX = curWordRight - w.wordWidth;
+                drawSingleWord(w, curWordX);
+                curWordRight -= (w.wordWidth + spaceWidth);
+              });
+            } else {
+              // LTR: Start at line left edge, placing first word on the far left
+              let curWordX = (width / 2) - (lineWidth / 2);
+              line.words.forEach(w => {
+                drawSingleWord(w, curWordX);
+                curWordX += (w.wordWidth + spaceWidth);
+              });
+            }
           });
         }
 
@@ -936,11 +1030,18 @@ export default function VideoExportModal({
         const modeLabel = isOriginal ? `Original (${width}x${height})` : (is4K ? '4K Ultra HD' : exportMode.toUpperCase());
         setBurnStatus(`Rendering ${modeLabel} (${pct}%)...`);
 
+        let frameScheduled = false;
+        const triggerNext = () => {
+          if (!frameScheduled && !isDone) {
+            frameScheduled = true;
+            renderFrame();
+          }
+        };
+
         if ('requestVideoFrameCallback' in video) {
-          video.requestVideoFrameCallback(renderFrame);
-        } else {
-          requestAnimationFrame(renderFrame);
+          video.requestVideoFrameCallback(() => triggerNext());
         }
+        requestAnimationFrame(() => triggerNext());
       };
 
       if ('requestVideoFrameCallback' in video) {
@@ -1290,12 +1391,75 @@ export default function VideoExportModal({
               </div>
             </button>
 
-            {/* 5. 4K Transparent Alpha Overlay */}
+            {/* 5. CapCut Native Transparent Overlay (.mov - Apple ProRes 4444) */}
+            <button
+              type="button"
+              onClick={() => setExportMode('capcut_transparent')}
+              style={{
+                gridColumn: '1 / -1',
+                padding: '14px 14px',
+                borderRadius: '10px',
+                background: exportMode === 'capcut_transparent'
+                  ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.28), rgba(236, 72, 153, 0.25))'
+                  : 'rgba(255, 255, 255, 0.04)',
+                border: exportMode === 'capcut_transparent' ? '1.5px solid #c084fc' : '1px solid var(--border-subtle)',
+                color: exportMode === 'capcut_transparent' ? '#ffffff' : 'var(--text-muted)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                boxShadow: exportMode === 'capcut_transparent' ? '0 0 18px rgba(168, 85, 247, 0.45)' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f3e8ff' }}>
+                  🎬 CapCut Native Transparent Overlay (.mov)
+                </span>
+                <span className="badge badge-purple" style={{ fontSize: '9px', padding: '2px 8px', background: 'rgba(168, 85, 247, 0.3)', color: '#e9d5ff', border: '1px solid #a855f7' }}>
+                  100% Transparent (No Overlay Needed!)
+                </span>
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px', lineHeight: 1.35 }}>
+                Apple ProRes 4444 MOV with true alpha. Import directly into CapCut (PC & Mac) — <strong>background is already 100% transparent</strong> without clicking overlay or blend mode! Colors stay solid & bright.
+              </div>
+            </button>
+
+            {/* 6. CapCut Green Screen Chroma Key MP4 */}
+            <button
+              type="button"
+              onClick={() => setExportMode('capcut_green')}
+              style={{
+                padding: '13px 12px',
+                borderRadius: '10px',
+                background: exportMode === 'capcut_green' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                border: exportMode === 'capcut_green' ? '1.5px solid #10b981' : '1px solid var(--border-subtle)',
+                color: exportMode === 'capcut_green' ? '#6ee7b7' : 'var(--text-muted)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                boxShadow: exportMode === 'capcut_green' ? '0 0 16px rgba(16, 185, 129, 0.35)' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700 }}>
+                  🟩 CapCut Green Screen
+                </span>
+                <span className="badge badge-emerald" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                  Chroma Key
+                </span>
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px', lineHeight: 1.3 }}>
+                MP4 over solid green (#00FF00). Best for CapCut Mobile with Chroma Key cutout.
+              </div>
+            </button>
+
+            {/* 7. 4K Transparent Alpha Overlay (WebM) */}
             <button
               type="button"
               onClick={() => setExportMode('4k_transparent')}
               style={{
-                padding: '12px 10px',
+                padding: '13px 12px',
                 borderRadius: '10px',
                 background: exportMode === '4k_transparent' ? 'rgba(168, 85, 247, 0.22)' : 'rgba(255, 255, 255, 0.04)',
                 border: exportMode === '4k_transparent' ? '1.5px solid var(--accent-purple)' : '1px solid var(--border-subtle)',
@@ -1307,18 +1471,60 @@ export default function VideoExportModal({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700 }}>✨ 4K Transparent</span>
-                <span className="badge badge-indigo" style={{ fontSize: '9px', padding: '1px 5px' }}>Pro Alpha</span>
+                <span style={{ fontSize: '12px', fontWeight: 700 }}>✨ 4K Alpha WebM</span>
+                <span className="badge badge-indigo" style={{ fontSize: '9px', padding: '1px 5px' }}>Premiere/DaVinci</span>
               </div>
               <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px', lineHeight: 1.3 }}>
-                Alpha subtitle track for Premiere / DaVinci editors
+                Alpha WebM for Premiere Pro & DaVinci Resolve.
               </div>
             </button>
           </div>
         </div>
 
-        {/* Guidance Banner */}
-        {exportMode !== '4k_transparent' ? (
+        {/* Guidance Banners */}
+        {exportMode === 'capcut_transparent' ? (
+          <div style={{
+            background: 'rgba(168, 85, 247, 0.12)',
+            border: '1px solid rgba(168, 85, 247, 0.35)',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            marginBottom: '16px',
+            fontSize: '11px',
+            lineHeight: 1.5,
+            color: '#e9d5ff'
+          }}>
+            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', color: '#c084fc' }}>
+              <Sparkles size={14} color="#c084fc" />
+              <span>CapCut Native Transparency (Apple ProRes 4444):</span>
+            </div>
+            <div>
+              1. Download this <strong>.mov</strong> file.<br/>
+              2. Drag and drop it into <strong>CapCut (Desktop)</strong> on the track directly above your video clip.<br/>
+              3. <strong>Done!</strong> The background is already 100% transparent. No "Overlay" or blend mode needed, and captions never get stuck!
+            </div>
+          </div>
+        ) : exportMode === '4k_transparent' ? (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            marginBottom: '16px',
+            fontSize: '11px',
+            lineHeight: 1.5,
+            color: '#fca5a5'
+          }}>
+            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', color: '#f87171' }}>
+              <AlertTriangle size={15} color="#ef4444" />
+              <span>Note for CapCut Users:</span>
+            </div>
+            <div>
+              CapCut cannot decode WebM alpha transparency and displays it with a black screen.
+              <br/>
+              • <strong>For CapCut native transparency:</strong> Choose <strong>"🎬 CapCut Native Transparent Overlay (.mov)"</strong> above!
+            </div>
+          </div>
+        ) : exportMode === 'capcut_green' ? (
           <div style={{
             background: 'rgba(16, 185, 129, 0.12)',
             border: '1px solid rgba(16, 185, 129, 0.35)',
@@ -1331,29 +1537,31 @@ export default function VideoExportModal({
           }}>
             <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
               <Check size={14} color="#10b981" />
-              <span>Anti-Freeze PTS Sync & True Rec.709 Color Preservation Active:</span>
+              <span>How to use Green Screen in CapCut:</span>
             </div>
             <div>
-              Your video renders with <strong>100% original color matrix (BT.709)</strong> so colors never fade or wash out. Timestamps are monotonic to prevent video from freezing/stuttering, encoded into universal <strong>H.264 (yuv420p) + AAC</strong> that plays smoothly on all devices!
+              1. In CapCut, import your video on the main track.<br/>
+              2. Tap <strong>Overlay → Add overlay</strong> and select this downloaded MP4.<br/>
+              3. Select the overlay track, tap <strong>Cutout → Chroma Key</strong>, pick the green color, set intensity to 15, and your captions will overlay transparently!
             </div>
           </div>
         ) : (
           <div style={{
-            background: 'rgba(245, 158, 11, 0.1)',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
             borderRadius: '10px',
             padding: '12px 14px',
             marginBottom: '16px',
             fontSize: '11px',
             lineHeight: 1.5,
-            color: '#fef08a'
+            color: '#6ee7b7'
           }}>
             <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-              <Layers size={14} color="#f59e0b" />
-              <span>Notice for CapCut Users:</span>
+              <Check size={14} color="#10b981" />
+              <span>Universal MP4 (CapCut, Reels & All Platforms Compatible):</span>
             </div>
             <div>
-              CapCut does not support transparent WebM (it displays a black background). <strong>If you want a ready-to-use video without touching CapCut, choose "👑 Original / Source" or "🌟 1080p Full HD" above instead</strong> so your video is exported directly!
+              Exports a complete, pristine video with original audio and burned captions in <strong>universal H.264 (yuv420p) + AAC MP4</strong> format. Plays with full video background in CapCut, Instagram, TikTok, and all devices!
             </div>
           </div>
         )}
@@ -1372,7 +1580,12 @@ export default function VideoExportModal({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Loader2 size={18} className="spin" color="#f59e0b" />
                 <span style={{ fontWeight: 700, fontSize: '14px', color: '#fde047' }}>
-                  {exportMode === '4k_full' ? 'Rendering 4K Ultra HD Full Video' : (exportMode === '1080p' ? 'Rendering 1080p Full HD Video' : (exportMode === '720p' ? 'Rendering 720p HD Video' : 'Rendering 4K Alpha Overlay'))}
+                  {exportMode === 'original' && 'Rendering Original Quality Video'}
+                  {exportMode === '4k_full' && 'Rendering 4K Ultra HD Full Video'}
+                  {exportMode === '1080p' && 'Rendering 1080p Full HD Video'}
+                  {exportMode === '720p' && 'Rendering 720p HD Video'}
+                  {exportMode === 'capcut_green' && 'Rendering CapCut Green Screen Video'}
+                  {exportMode === '4k_transparent' && 'Rendering 4K Alpha Overlay'}
                 </span>
               </div>
               <span style={{ fontSize: '16px', fontWeight: 800, color: '#fde047', fontFamily: 'monospace' }}>
@@ -1415,28 +1628,32 @@ export default function VideoExportModal({
               <div style={{
                 padding: '10px',
                 borderRadius: '10px',
-                background: exportMode === '4k_full' ? 'rgba(245, 158, 11, 0.2)' : (exportMode === '4k_transparent' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(99, 102, 241, 0.2)'),
-                color: exportMode === '4k_full' ? 'var(--accent-amber)' : (exportMode === '4k_transparent' ? 'var(--accent-purple)' : 'var(--accent-indigo)')
+                background: exportMode === '4k_full' ? 'rgba(245, 158, 11, 0.2)' : (exportMode === '4k_transparent' ? 'rgba(168, 85, 247, 0.2)' : (exportMode === 'capcut_green' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)')),
+                color: exportMode === '4k_full' ? 'var(--accent-amber)' : (exportMode === '4k_transparent' ? 'var(--accent-purple)' : (exportMode === 'capcut_green' ? 'var(--accent-emerald)' : 'var(--accent-indigo)'))
               }}>
                 <Video size={20} />
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>
-                    {exportMode === '4k_full' && '4K Ultra HD Full Video'}
-                    {exportMode === '1080p' && '1080p Full HD Video'}
-                    {exportMode === '720p' && '720p HD Video'}
-                    {exportMode === '4k_transparent' && '4K Transparent Alpha Captions (.webm)'}
+                    {exportMode === 'original' && '👑 Original Resolution Video (MP4)'}
+                    {exportMode === '4k_full' && '🔥 4K Ultra HD Full Video (MP4)'}
+                    {exportMode === '1080p' && '🌟 1080p Full HD Video (MP4)'}
+                    {exportMode === '720p' && '⚡ 720p HD Video (MP4)'}
+                    {exportMode === 'capcut_green' && '🎬 CapCut Chroma Key Green Screen (MP4)'}
+                    {exportMode === '4k_transparent' && '✨ 4K Transparent Alpha Captions (.webm)'}
                   </span>
-                  <span className={`badge ${exportMode === '4k_full' ? 'badge-amber' : (exportMode === '4k_transparent' ? 'badge-indigo' : 'badge-emerald')}`}>
-                    {exportMode === '4k_transparent' ? 'Alpha VP9' : 'Complete Video'}
+                  <span className={`badge ${exportMode === '4k_full' ? 'badge-amber' : (exportMode === '4k_transparent' ? 'badge-indigo' : (exportMode === 'capcut_green' ? 'badge-emerald' : 'badge-emerald'))}`}>
+                    {exportMode === '4k_transparent' ? 'Alpha VP9' : (exportMode === 'capcut_green' ? 'Chroma Key' : 'Complete Video')}
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                  {exportMode === '4k_full' && 'Direct 4K video with original audio & burned captions (No CapCut needed)'}
-                  {exportMode === '1080p' && 'Full HD video with audio & burned captions ready to post'}
+                  {exportMode === 'original' && 'Complete native resolution video with original audio & burned captions (100% CapCut & Socials Compatible MP4)'}
+                  {exportMode === '4k_full' && 'Direct 4K video with original audio & burned captions (Universal MP4)'}
+                  {exportMode === '1080p' && 'Full HD video with audio & burned captions ready to post on Reels / TikTok'}
                   {exportMode === '720p' && 'Fast 720p video export with audio & burned captions'}
-                  {exportMode === '4k_transparent' && 'Only transparent animated captions overlay for Premiere / DaVinci'}
+                  {exportMode === 'capcut_green' && 'Solid green screen video for 1-click Chroma Key overlay inside CapCut'}
+                  {exportMode === '4k_transparent' && 'Transparent animated captions overlay for Premiere / DaVinci (Shows black in CapCut)'}
                 </div>
               </div>
             </div>
@@ -1459,7 +1676,13 @@ export default function VideoExportModal({
               ) : (
                 <>
                   <Sparkles size={14} />
-                  <span>{exportMode === '4k_transparent' ? 'Export 4K Alpha' : `Render ${exportMode}`}</span>
+                  <span>
+                    {exportMode === '4k_transparent' ? 'Export 4K Alpha (.webm)' : (
+                      exportMode === 'original' ? 'Render Original MP4' : (
+                        exportMode === 'capcut_green' ? 'Render Green Screen MP4' : `Render ${exportMode.toUpperCase()} MP4`
+                      )
+                    )}
+                  </span>
                 </>
               )}
             </button>

@@ -257,57 +257,92 @@ export default function VideoPlayer({
             loop
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
             onClick={togglePlay}
           />
 
               {/* Subtitles Overlay */}
-          {activeSubtitle && (
-            <div
-              className={`caption-overlay ${activeStyle.className || ''}`}
-              style={{
-                top: `${activeStyle.position || 75}%`,
-                fontSize: `${activeStyle.fontSize || 24}px`,
-                fontFamily: `var(--font-${activeStyle.fontFamily?.toLowerCase().replace(/\s+/g, '') || 'sans'}), sans-serif`,
-                textTransform: activeStyle.textTransform || 'none'
-              }}
-            >
-              {(() => {
-                let allWords = activeSubtitle.words && activeSubtitle.words.length > 0 ? activeSubtitle.words : null;
-                if (!allWords) {
-                  const text = activeSubtitle.text || '';
-                  const wordList = text.trim().split(/\s+/).filter(Boolean);
-                  const dur = Math.max(0.15, (activeSubtitle.end - activeSubtitle.start) / Math.max(1, wordList.length));
-                  allWords = wordList.map((w, wIdx) => ({
-                    word: w,
-                    start: Math.round((activeSubtitle.start + (wIdx * dur)) * 100) / 100,
-                    end: Math.round((activeSubtitle.start + ((wIdx + 1) * dur)) * 100) / 100
-                  }));
-                }
+          {activeSubtitle && (() => {
+            const isUrdu = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(activeSubtitle.text || '');
+            let allWords = activeSubtitle.words && activeSubtitle.words.length > 0 ? activeSubtitle.words : null;
+            if (!allWords) {
+              const text = activeSubtitle.text || '';
+              const wordList = text.trim().split(/\s+/).filter(Boolean);
+              const dur = Math.max(0.15, (activeSubtitle.end - activeSubtitle.start) / Math.max(1, wordList.length));
+              allWords = wordList.map((w, wIdx) => ({
+                word: w,
+                start: Math.round((activeSubtitle.start + (wIdx * dur)) * 100) / 100,
+                end: Math.round((activeSubtitle.start + ((wIdx + 1) * dur)) * 100) / 100
+              }));
+            }
 
-                if (allWords.length === 0) {
-                  return <span className="regular-word">{activeSubtitle.text}</span>;
-                }
+            if (allWords.length === 0) {
+              return (
+                <div
+                  className={`caption-overlay ${activeStyle.className || ''}`}
+                  dir={isUrdu ? 'rtl' : 'ltr'}
+                  style={{
+                    top: `${activeStyle.position || 75}%`,
+                    fontSize: `${activeStyle.fontSize || 24}px`,
+                    fontFamily: isUrdu ? 'var(--font-urdu), serif' : `var(--font-${activeStyle.fontFamily?.toLowerCase().replace(/\s+/g, '') || 'sans'}), sans-serif`,
+                    textTransform: activeStyle.textTransform || 'none'
+                  }}
+                >
+                  <span className="regular-word">{activeSubtitle.text}</span>
+                </div>
+              );
+            }
 
-                let visibleWords = allWords;
-                if (wordsPerScreen && wordsPerScreen !== 'all') {
-                  const chunkSize = parseInt(wordsPerScreen, 10);
-                  if (!isNaN(chunkSize) && chunkSize > 0) {
-                    const chunks = [];
-                    for (let i = 0; i < allWords.length; i += chunkSize) {
-                      chunks.push(allWords.slice(i, i + chunkSize));
-                    }
-                    const activeChunk = chunks.find(c => currentTime >= c[0].start && currentTime <= c[c.length - 1].end);
-                    if (activeChunk) {
-                      visibleWords = activeChunk;
-                    } else {
-                      const past = chunks.filter(c => currentTime >= c[0].start);
-                      visibleWords = past.length > 0 ? past[past.length - 1] : chunks[0];
-                    }
-                  }
+            let visibleWords = allWords;
+            if (wordsPerScreen && wordsPerScreen !== 'all') {
+              const chunkSize = parseInt(wordsPerScreen, 10);
+              if (!isNaN(chunkSize) && chunkSize > 0) {
+                const chunks = [];
+                for (let i = 0; i < allWords.length; i += chunkSize) {
+                  chunks.push(allWords.slice(i, i + chunkSize));
                 }
+                const activeChunk = chunks.find(c => currentTime >= c[0].start && currentTime <= c[c.length - 1].end);
+                if (activeChunk) {
+                  visibleWords = activeChunk;
+                } else {
+                  const past = chunks.filter(c => currentTime >= c[0].start);
+                  visibleWords = past.length > 0 ? past[past.length - 1] : chunks[0];
+                }
+              }
+            }
 
-                return visibleWords.map((w, idx) => {
-                  const isWordActive = currentTime >= w.start && currentTime <= w.end;
+            // Strictly 1 active word to prevent double highlight blobs
+            let activeWordIdx = -1;
+            for (let i = 0; i < visibleWords.length; i++) {
+              const w = visibleWords[i];
+              const isLast = i === visibleWords.length - 1;
+              if (currentTime >= w.start && (isLast ? currentTime <= w.end : currentTime < w.end)) {
+                activeWordIdx = i;
+                break;
+              }
+            }
+            if (activeWordIdx === -1 && visibleWords.length > 0) {
+              const matching = visibleWords.filter(w => currentTime >= w.start);
+              if (matching.length > 0) {
+                activeWordIdx = visibleWords.indexOf(matching[matching.length - 1]);
+              }
+            }
+
+            return (
+              <div
+                className={`caption-overlay ${activeStyle.className || ''}`}
+                dir={isUrdu ? 'rtl' : 'ltr'}
+                style={{
+                  top: `${activeStyle.position || 75}%`,
+                  fontSize: `${activeStyle.fontSize || 24}px`,
+                  fontFamily: isUrdu ? 'var(--font-urdu), serif' : `var(--font-${activeStyle.fontFamily?.toLowerCase().replace(/\s+/g, '') || 'sans'}), sans-serif`,
+                  textTransform: activeStyle.textTransform || 'none'
+                }}
+              >
+                {visibleWords.map((w, idx) => {
+                  const isWordActive = idx === activeWordIdx;
                   return (
                     <span
                       key={idx}
@@ -315,16 +350,20 @@ export default function VideoPlayer({
                       style={{
                         margin: '0 4px',
                         display: 'inline-block',
-                        transition: 'all 0.12s ease'
+                        verticalAlign: 'middle',
+                        color: (isWordActive && activeStyle.activeColor && !['tiktok', 'nas', 'bubble'].includes(activeStyle.id))
+                          ? activeStyle.activeColor
+                          : undefined,
+                        transition: 'color 0.15s ease, background 0.15s ease'
                       }}
                     >
                       {w.word}
                     </span>
                   );
-                });
-              })()}
-            </div>
-          )}
+                })}
+              </div>
+            );
+          })()}
 
           {/* Big Center Play Button Overlay when paused */}
           {!isPlaying && (
